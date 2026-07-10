@@ -1,0 +1,2 @@
+/usr/bin/ar qc liblume_core.a CMakeFiles/lume_core.dir/src/buffer.c.o CMakeFiles/lume_core.dir/src/config.c.o CMakeFiles/lume_core.dir/src/connection.c.o CMakeFiles/lume_core.dir/src/event_loop.c.o CMakeFiles/lume_core.dir/src/http.c.o CMakeFiles/lume_core.dir/src/log.c.o CMakeFiles/lume_core.dir/src/mime.c.o CMakeFiles/lume_core.dir/src/server.c.o CMakeFiles/lume_core.dir/src/static_file.c.o
+/usr/bin/ranlib liblume_core.a

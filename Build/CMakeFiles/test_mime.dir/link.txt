@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/test_mime.dir/tests/test_mime.c.o -o test_mime  liblume_core.a 

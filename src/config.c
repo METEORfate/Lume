@@ -48,7 +48,7 @@ void lume_config_init(lume_config *config)
     if (!config) {
         return;
     }
-
+    
     config->port = 8080;
     config->max_request_bytes = LUME_DEFAULT_MAX_REQUEST_BYTES;
     config->max_connections = LUME_DEFAULT_MAX_CONNECTIONS;
