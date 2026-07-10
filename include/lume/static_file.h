@@ -19,8 +19,5 @@ typedef struct lume_static_file {
 
 void lume_static_file_init(lume_static_file *file);
 void lume_static_file_close(lume_static_file *file);
-lume_static_result lume_static_file_open(const char *root_dir,
-                                         const char *uri,
-                                         lume_static_file *file);
-
+lume_static_result lume_static_file_open(const char *root_dir,const char *uri,lume_static_file *file);
 #endif

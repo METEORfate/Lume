@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/test_static_path.dir/tests/test_static_path.c.o -o test_static_path  liblume_core.a 

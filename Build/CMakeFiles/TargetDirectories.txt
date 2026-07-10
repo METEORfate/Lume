@@ -1,9 +1,0 @@
-/home/law/Lume/Build/CMakeFiles/lume_core.dir
-/home/law/Lume/Build/CMakeFiles/lume_server.dir
-/home/law/Lume/Build/CMakeFiles/test_config.dir
-/home/law/Lume/Build/CMakeFiles/test_http.dir
-/home/law/Lume/Build/CMakeFiles/test_mime.dir
-/home/law/Lume/Build/CMakeFiles/test_static_path.dir
-/home/law/Lume/Build/CMakeFiles/test.dir
-/home/law/Lume/Build/CMakeFiles/edit_cache.dir
-/home/law/Lume/Build/CMakeFiles/rebuild_cache.dir

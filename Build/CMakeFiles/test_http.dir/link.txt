@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/test_http.dir/tests/test_http.c.o -o test_http  liblume_core.a 

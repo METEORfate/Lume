@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/test_config.dir/tests/test_config.c.o -o test_config  liblume_core.a 

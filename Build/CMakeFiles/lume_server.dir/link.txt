@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/lume_server.dir/src/main.c.o -o lume_server  liblume_core.a 
