@@ -4,8 +4,15 @@
 #include <limits.h>
 #include <stddef.h>
 
+#define LUME_DEFAULT_MAX_REQUEST_BYTES 16384
+#define LUME_DEFAULT_MAX_CONNECTIONS 4096
+#define LUME_DEFAULT_REQUEST_TIMEOUT_SECONDS 30
+
 typedef struct lume_config {
     int port;
+    size_t max_request_bytes;
+    size_t max_connections;
+    unsigned int request_timeout_seconds;
     char root_dir[PATH_MAX];
 } lume_config;
 

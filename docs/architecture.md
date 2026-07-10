@@ -1,9 +1,9 @@
 # Lume Static Server Architecture
 
-Lume is a small Linux C static web server. The first implementation focuses on
-complete business behavior, clear module boundaries, and reliable resource
-cleanup. Performance-oriented changes such as sendfile and edge-triggered epoll
-are intentionally left for later iterations.
+Lume is a small Linux C static web server. The current implementation focuses on
+complete business behavior, clear module boundaries, reliable resource cleanup,
+and phase-two non-blocking I/O hardening. Performance-oriented changes such as
+sendfile and edge-triggered epoll are intentionally left for later iterations.
 
 ## Request Flow
 
@@ -11,9 +11,11 @@ are intentionally left for later iterations.
 2. `server` creates a non-blocking TCP socket, binds it to `PORT`, and starts
    listening.
 3. `event_loop` creates an epoll instance, registers the listener, accepts new
-   clients, and dispatches client events.
-4. `connection` reads until the HTTP request headers are complete, builds one
-   response, writes it, and closes the short-lived TCP connection.
+   clients, enforces `MAX_CONNECTIONS`, dispatches client events, and prunes
+   idle connections after `REQUEST_TIMEOUT`.
+4. `connection` reads until the HTTP request headers are complete, rejects
+   oversized requests, builds one response, writes headers and files in explicit
+   states, and closes the short-lived TCP connection.
 5. `http` parses the request line and builds standard HTTP/1.1 response
    headers.
 6. `static_file` maps a URI into `ROOT_DIR`, rejects unsafe paths, opens the
@@ -35,6 +37,15 @@ The current server supports:
 - Status codes `200`, `400`, `404`, and `501`
 - Short connections with `Connection: close`
 - Static HTML, CSS, JS, JSON, text, and common image MIME types
+- Configurable request header size, active connection, and idle timeout limits
+
+The connection state machine is:
+
+- `READING`
+- `PROCESSING`
+- `WRITING_HEADER`
+- `WRITING_FILE`
+- `CLOSING`
 
 The current server does not support:
 
@@ -47,5 +58,5 @@ The current server does not support:
 ## Iteration Notes
 
 The next performance iteration should keep the module boundaries intact and
-focus on connection state detail, partial I/O tuning, `sendfile`, configurable
-limits, and benchmark-driven epoll trigger changes.
+focus on `sendfile`, buffer reuse, response construction cost, and
+benchmark-driven epoll trigger changes.

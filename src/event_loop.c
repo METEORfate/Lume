@@ -8,7 +8,14 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
+
+typedef struct connection_node {
+    lume_connection *connection;
+    struct connection_node *next;
+} connection_node;
 
 static int register_listener(lume_server *server, lume_event_source *listener)
 {
@@ -26,15 +33,47 @@ static int register_listener(lume_server *server, lume_event_source *listener)
     return 0;
 }
 
-static void close_connection(lume_server *server, lume_connection *connection)
+static int track_connection(connection_node **connections, lume_connection *connection)
 {
+    connection_node *node = malloc(sizeof(*node));
+
+    if (!node) {
+        return -1;
+    }
+
+    node->connection = connection;
+    node->next = *connections;
+    *connections = node;
+    return 0;
+}
+
+static void untrack_connection(connection_node **connections, lume_connection *connection)
+{
+    connection_node **current = connections;
+
+    while (*current) {
+        if ((*current)->connection == connection) {
+            connection_node *matched = *current;
+            *current = matched->next;
+            free(matched);
+            return;
+        }
+        current = &(*current)->next;
+    }
+}
+
+static void close_connection(lume_server *server,
+                             connection_node **connections,
+                             lume_connection *connection)
+{
+    untrack_connection(connections, connection);
     lume_connection_destroy(connection);
     if (server->active_connections > 0) {
         server->active_connections--;
     }
 }
 
-static void accept_connections(lume_server *server)
+static void accept_connections(lume_server *server, connection_node **connections)
 {
     for (;;) {
         int client_fd = accept4(server->listen_fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
@@ -51,6 +90,12 @@ static void accept_connections(lume_server *server)
             return;
         }
 
+        if (server->active_connections >= server->config.max_connections) {
+            LUME_LOGW("max connections reached, closing accepted client fd=%d", client_fd);
+            close(client_fd);
+            continue;
+        }
+
         connection = lume_connection_create(client_fd, server->epoll_fd, &server->config);
         if (!connection) {
             close(client_fd);
@@ -62,7 +107,35 @@ static void accept_connections(lume_server *server)
             continue;
         }
 
+        if (track_connection(connections, connection) != 0) {
+            LUME_LOGE("failed to track client connection");
+            lume_connection_destroy(connection);
+            continue;
+        }
+
         server->active_connections++;
+    }
+}
+
+static void prune_idle_connections(lume_server *server, connection_node **connections)
+{
+    connection_node *node = *connections;
+    time_t now;
+
+    if (server->config.request_timeout_seconds == 0) {
+        return;
+    }
+
+    now = time(NULL);
+    while (node) {
+        connection_node *next = node->next;
+
+        if (lume_connection_is_idle_expired(node->connection, now)) {
+            LUME_LOGW("closing idle connection after %us", server->config.request_timeout_seconds);
+            close_connection(server, connections, node->connection);
+        }
+
+        node = next;
     }
 }
 
@@ -70,6 +143,7 @@ int lume_event_loop_run(lume_server *server)
 {
     struct epoll_event events[LUME_DEFAULT_MAX_EVENTS];
     lume_event_source listener = {LUME_EVENT_LISTENER};
+    connection_node *connections = NULL;
 
     if (!server || server->listen_fd < 0) {
         return -1;
@@ -86,7 +160,10 @@ int lume_event_loop_run(lume_server *server)
     }
 
     for (;;) {
-        int count = epoll_wait(server->epoll_fd, events, LUME_DEFAULT_MAX_EVENTS, -1);
+        int count = epoll_wait(server->epoll_fd,
+                               events,
+                               LUME_DEFAULT_MAX_EVENTS,
+                               LUME_EPOLL_WAIT_TIMEOUT_MS);
         int i;
 
         if (count < 0) {
@@ -105,13 +182,15 @@ int lume_event_loop_run(lume_server *server)
             }
 
             if (source->type == LUME_EVENT_LISTENER) {
-                accept_connections(server);
+                accept_connections(server, &connections);
             } else if (source->type == LUME_EVENT_CONNECTION) {
                 lume_connection *connection = (lume_connection *)source;
                 if (lume_connection_handle(connection, events[i].events) != 0) {
-                    close_connection(server, connection);
+                    close_connection(server, &connections, connection);
                 }
             }
         }
+
+        prune_idle_connections(server, &connections);
     }
 }

@@ -7,6 +7,7 @@
 
 #define LUME_DEFAULT_BACKLOG 128
 #define LUME_DEFAULT_MAX_EVENTS 1024
+#define LUME_EPOLL_WAIT_TIMEOUT_MS 1000
 
 typedef struct lume_server {
     lume_config config;

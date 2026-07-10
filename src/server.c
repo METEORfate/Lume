@@ -68,6 +68,10 @@ int lume_server_init(lume_server *server, const lume_config *config)
 
     server->listen_fd = fd;
     LUME_LOGI("listening on port %d, root=%s", config->port, config->root_dir);
+    LUME_LOGI("limits: max_request_bytes=%zu, max_connections=%zu, request_timeout=%us",
+              config->max_request_bytes,
+              config->max_connections,
+              config->request_timeout_seconds);
     return 0;
 }
 

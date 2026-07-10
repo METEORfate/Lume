@@ -205,7 +205,9 @@ close
 - 把监听 fd 注册到 epoll。
 - 调用 `epoll_wait` 等待事件。
 - 监听 fd 可读时，循环 `accept4` 新连接。
+- 根据 `MAX_CONNECTIONS` 控制同时活跃连接数量。
 - 客户端 fd 有事件时，转发给 `connection` 模块处理。
+- 每秒扫描一次连接链表，关闭超过 `REQUEST_TIMEOUT` 的空闲连接。
 - 连接完成或出错后销毁连接并关闭 fd。
 
 主要系统调用：
@@ -226,9 +228,11 @@ accept4
 当前状态包括：
 
 ```text
-CONNECTION_READING   -> 正在读取请求
-CONNECTION_WRITING   -> 正在发送响应
-CONNECTION_CLOSING   -> 准备关闭连接
+CONNECTION_READING         -> 正在读取请求
+CONNECTION_PROCESSING      -> 正在解析请求并准备响应
+CONNECTION_WRITING_HEADER  -> 正在发送响应头和错误响应体
+CONNECTION_WRITING_FILE    -> 正在分块发送静态文件
+CONNECTION_CLOSING         -> 准备关闭连接
 ```
 
 读取流程：
@@ -237,17 +241,19 @@ CONNECTION_CLOSING   -> 准备关闭连接
 2. `connection` 循环 `read` 数据。
 3. 数据追加到读缓冲区。
 4. 检查是否已经读到 HTTP 头结束标记。
-5. 请求完整后调用 HTTP 解析。
-6. 根据解析结果准备错误响应或静态文件响应。
+5. 如果请求头超过 `MAX_REQUEST_BYTES`，返回 `400 Bad Request`。
+6. 请求完整后进入 `CONNECTION_PROCESSING`。
+7. 根据解析结果准备错误响应或静态文件响应。
 
 写入流程：
 
 1. 客户端 fd 触发 `EPOLLOUT`。
 2. 先发送响应头缓冲区。
-3. 如果有文件，再分块读取文件并写到 socket。
-4. 响应发送完毕后关闭连接。
+3. 响应头发完后，如果有文件，切换到 `CONNECTION_WRITING_FILE`。
+4. 文件按 `Content-Length` 对应的大小分块读取并写到 socket。
+5. 响应发送完毕后关闭连接。
 
-当前版本为了业务正确性，使用 `read + write` 分块发送文件。后续性能优化阶段
+当前版本为了业务正确性，仍使用 `read + write` 分块发送文件。后续性能优化阶段
 可以把文件发送替换成 `sendfile`。
 
 ### `http`
@@ -453,6 +459,9 @@ config/server.conf
 # Lume static server configuration.
 PORT=8080
 ROOT_DIR=public
+MAX_REQUEST_BYTES=16384
+MAX_CONNECTIONS=4096
+REQUEST_TIMEOUT=30
 ```
 
 字段说明：
@@ -461,12 +470,18 @@ ROOT_DIR=public
 | --- | --- | --- |
 | `PORT` | 服务器监听端口 | `8080` |
 | `ROOT_DIR` | 静态文件根目录 | `public` |
+| `MAX_REQUEST_BYTES` | 单个请求头最大字节数，超出返回 400 | `16384` |
+| `MAX_CONNECTIONS` | 同时活跃连接数量上限，超出后关闭新连接 | `4096` |
+| `REQUEST_TIMEOUT` | 空闲连接超时秒数，`0` 表示禁用 | `30` |
 
 例如你想监听 `9090`：
 
 ```conf
 PORT=9090
 ROOT_DIR=public
+MAX_REQUEST_BYTES=16384
+MAX_CONNECTIONS=4096
+REQUEST_TIMEOUT=30
 ```
 
 例如你想把网站文件放到 `/var/www/demo`：
@@ -474,6 +489,9 @@ ROOT_DIR=public
 ```conf
 PORT=8080
 ROOT_DIR=/var/www/demo
+MAX_REQUEST_BYTES=16384
+MAX_CONNECTIONS=4096
+REQUEST_TIMEOUT=30
 ```
 
 注意：
@@ -520,10 +538,12 @@ scripts/smoke.sh
 2. 生成临时配置文件。
 3. 启动 `build/lume_server`。
 4. 使用 `curl` 请求 HTML、CSS、JS、图片。
-5. 验证 `404`。
-6. 验证 `POST` 返回 `501`。
-7. 验证目录遍历请求返回 `400`。
-8. 自动关闭服务器并清理临时目录。
+5. 验证大文件完整下载。
+6. 验证 `404`。
+7. 验证 `POST` 返回 `501`。
+8. 验证目录遍历请求返回 `400`。
+9. 验证超长请求头返回 `400`。
+10. 自动关闭服务器并清理临时目录。
 
 默认测试端口是 `18080`。如果你想换端口：
 
@@ -553,7 +573,7 @@ scripts/bench.sh http://127.0.0.1:8080/
 sudo apt install wrk apache2-utils
 ```
 
-注意：当前第一阶段还没有 `sendfile` 和边缘触发优化，压测结果主要用作后续优化
+注意：当前版本还没有 `sendfile` 和边缘触发优化，压测结果主要用作后续优化
 前的基线，不代表最终性能目标。
 
 ## 9. 手动验证常见 HTTP 行为
@@ -752,19 +772,19 @@ mkdir -p public
 
 ## 12. 后续优化方向
 
-阶段二建议：
+阶段二已经完成的增强：
 
-- 完善更细的连接状态机，例如 `WRITING_HEADER`、`WRITING_FILE`。
-- 增加连接空闲超时。
-- 增加最大连接数限制。
-- 更系统地处理 partial read 和 partial write 的边界情况。
-- 增加更多异常请求测试。
+- 拆分连接状态机为读取、处理、发送响应头、发送文件和关闭。
+- 增加 `MAX_REQUEST_BYTES` 请求头大小限制。
+- 增加 `MAX_CONNECTIONS` 活跃连接上限。
+- 增加 `REQUEST_TIMEOUT` 空闲连接超时清理。
+- 增加大文件下载和超长请求头冒烟测试。
 
 阶段三建议：
 
 - 使用 `sendfile` 发送静态文件，减少用户态拷贝。
 - 评估并引入 `EPOLLET` 边缘触发。
-- 增加配置项：`BACKLOG`、`MAX_EVENTS`、`MAX_CONNECTIONS`。
+- 增加配置项：`BACKLOG`、`MAX_EVENTS`。
 - 优化响应头构造和缓冲区复用。
 - 用 `wrk` 持续压测并记录 QPS、延迟和错误率。
 

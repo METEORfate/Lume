@@ -50,10 +50,13 @@ void lume_config_init(lume_config *config)
     }
 
     config->port = 8080;
+    config->max_request_bytes = LUME_DEFAULT_MAX_REQUEST_BYTES;
+    config->max_connections = LUME_DEFAULT_MAX_CONNECTIONS;
+    config->request_timeout_seconds = LUME_DEFAULT_REQUEST_TIMEOUT_SECONDS;
     config->root_dir[0] = '\0';
 }
 
-static int parse_port(const char *value, int *port)
+static int parse_long(const char *value, long min, long max, long *out)
 {
     char *end = NULL;
     long parsed;
@@ -65,11 +68,35 @@ static int parse_port(const char *value, int *port)
     }
 
     end = trim(end);
-    if (*end != '\0' || parsed < 1 || parsed > 65535) {
+    if (*end != '\0' || parsed < min || parsed > max) {
+        return -1;
+    }
+
+    *out = parsed;
+    return 0;
+}
+
+static int parse_port(const char *value, int *port)
+{
+    long parsed;
+
+    if (parse_long(value, 1, 65535, &parsed) != 0) {
         return -1;
     }
 
     *port = (int)parsed;
+    return 0;
+}
+
+static int parse_size_value(const char *value, size_t min, size_t max, size_t *out)
+{
+    long parsed;
+
+    if (parse_long(value, (long)min, (long)max, &parsed) != 0) {
+        return -1;
+    }
+
+    *out = (size_t)parsed;
     return 0;
 }
 
@@ -138,6 +165,27 @@ int lume_config_load(const char *path, lume_config *config, char *error, size_t 
                 return -1;
             }
             snprintf(root_value, sizeof(root_value), "%s", value);
+        } else if (strcmp(key, "MAX_REQUEST_BYTES") == 0) {
+            if (parse_size_value(value, 1024, 1024 * 1024, &loaded.max_request_bytes) != 0) {
+                fclose(fp);
+                set_error(error, error_len, "config line %d has invalid MAX_REQUEST_BYTES", line_no);
+                return -1;
+            }
+        } else if (strcmp(key, "MAX_CONNECTIONS") == 0) {
+            if (parse_size_value(value, 1, 1000000, &loaded.max_connections) != 0) {
+                fclose(fp);
+                set_error(error, error_len, "config line %d has invalid MAX_CONNECTIONS", line_no);
+                return -1;
+            }
+        } else if (strcmp(key, "REQUEST_TIMEOUT") == 0) {
+            size_t timeout;
+
+            if (parse_size_value(value, 0, 86400, &timeout) != 0) {
+                fclose(fp);
+                set_error(error, error_len, "config line %d has invalid REQUEST_TIMEOUT", line_no);
+                return -1;
+            }
+            loaded.request_timeout_seconds = (unsigned int)timeout;
         } else {
             fclose(fp);
             set_error(error, error_len, "config line %d has unknown key '%s'", line_no, key);
