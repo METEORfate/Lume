@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Lume 静态 Web 服务器总体架构</title>
+  <desc id="desc">Lume C 静态 Web 服务器的总体架构图，展示启动阶段、单线程 Reactor 核心、连接状态机、HTTP 解析、静态文件访问、安全检查、日志和系统调用。</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font: 700 34px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 16px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #5a6475; }
+      .group-title { font: 700 18px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #263247; }
+      .box-title { font: 700 17px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #172033; }
+      .box-text { font: 400 13px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #4d5868; }
+      .small { font: 400 12px "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #5b6573; }
+      .code { font: 600 13px "JetBrains Mono", Consolas, monospace; fill: #243247; }
+      .group { fill: #ffffff; stroke: #d9e1ec; stroke-width: 1.5; rx: 18; }
+      .box { fill: #ffffff; stroke: #c7d2df; stroke-width: 1.4; rx: 10; }
+      .blue { fill: #eaf3ff; stroke: #6ca6df; }
+      .green { fill: #eaf8f0; stroke: #59aa78; }
+      .amber { fill: #fff5df; stroke: #d59b3d; }
+      .red { fill: #fff0f0; stroke: #df6b6b; }
+      .violet { fill: #f1efff; stroke: #8a7ad9; }
+      .gray { fill: #f2f5f8; stroke: #aeb8c5; }
+      .arrow { fill: none; stroke: #4d6b8a; stroke-width: 2.2; marker-end: url(#arrow); }
+      .arrow-green { fill: none; stroke: #39865d; stroke-width: 2.2; marker-end: url(#arrow-green); }
+      .arrow-red { fill: none; stroke: #be4c4c; stroke-width: 2.2; marker-end: url(#arrow-red); }
+      .arrow-amber { fill: none; stroke: #b17922; stroke-width: 2.2; marker-end: url(#arrow-amber); }
+      .dash { stroke-dasharray: 7 6; }
+      .pill { fill: #ffffff; stroke: #cdd6e3; stroke-width: 1.2; rx: 16; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4d6b8a"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39865d"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#be4c4c"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b17922"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1600" height="900"/>
+  <text class="title" x="58" y="62">Lume 静态 Web 服务器总体架构</text>
+  <text class="subtitle" x="60" y="91">Linux C · 单线程 Reactor · epoll · HTTP GET · 静态文件服务 · 短连接</text>
+
+  <rect class="group" x="50" y="125" width="330" height="235"/>
+  <text class="group-title" x="75" y="158">启动阶段</text>
+  <rect class="box amber" x="78" y="185" width="120" height="62"/>
+  <text class="box-title" x="116" y="212">main</text>
+  <text class="box-text" x="99" y="233">忽略 SIGPIPE</text>
+  <rect class="box amber" x="232" y="185" width="118" height="62"/>
+  <text class="box-title" x="259" y="212">config</text>
+  <text class="box-text" x="251" y="233">读取 server.conf</text>
+  <rect class="box amber" x="78" y="276" width="272" height="58"/>
+  <text class="box-title" x="110" y="303">server 创建监听 socket</text>
+  <text class="box-text" x="105" y="323">socket · SO_REUSEADDR · bind · listen</text>
+  <path class="arrow-amber" d="M198 216 H226"/>
+  <path class="arrow-amber" d="M291 247 C291 266 252 269 238 276"/>
+  <path class="arrow-amber" d="M138 247 C138 263 154 268 172 276"/>
+
+  <rect class="group" x="425" y="125" width="720" height="430"/>
+  <text class="group-title" x="450" y="158">单线程 Reactor 核心</text>
+  <rect class="box blue" x="455" y="185" width="160" height="66"/>
+  <text class="box-title" x="495" y="212">event_loop</text>
+  <text class="box-text" x="480" y="234">注册 listen fd</text>
+  <rect class="box blue" x="670" y="185" width="160" height="66"/>
+  <text class="box-title" x="709" y="212">epoll_wait</text>
+  <text class="box-text" x="698" y="234">等待 fd 事件</text>
+  <rect class="box blue" x="885" y="185" width="210" height="66"/>
+  <text class="box-title" x="933" y="212">accept4 新连接</text>
+  <text class="box-text" x="927" y="234">非阻塞 · CLOEXEC</text>
+
+  <rect class="box violet" x="520" y="310" width="520" height="190"/>
+  <text class="box-title" x="685" y="342">connection 连接状态机</text>
+  <rect class="pill" x="552" y="374" width="94" height="34"/>
+  <text class="code" x="569" y="396">READING</text>
+  <rect class="pill" x="676" y="374" width="122" height="34"/>
+  <text class="code" x="693" y="396">PROCESSING</text>
+  <rect class="pill" x="828" y="374" width="150" height="34"/>
+  <text class="code" x="845" y="396">WRITING_HEADER</text>
+  <rect class="pill" x="612" y="438" width="138" height="34"/>
+  <text class="code" x="628" y="460">WRITING_FILE</text>
+  <rect class="pill" x="780" y="438" width="96" height="34"/>
+  <text class="code" x="799" y="460">CLOSING</text>
+  <path class="arrow" d="M646 391 H670"/>
+  <path class="arrow" d="M798 391 H822"/>
+  <path class="arrow" d="M903 408 C903 428 776 428 733 438"/>
+  <path class="arrow" d="M750 455 H774"/>
+  <text class="small" x="570" y="486">按状态切换 EPOLLIN / EPOLLOUT，完成后主动关闭连接</text>
+
+  <path class="arrow" d="M350 305 C382 305 400 220 455 220"/>
+  <path class="arrow" d="M615 218 H664"/>
+  <path class="arrow" d="M830 218 H879"/>
+  <path class="arrow" d="M990 251 C990 286 960 296 928 310"/>
+  <path class="arrow dash" d="M750 251 V304"/>
+  <text class="small" x="746" y="281">client fd 事件</text>
+
+  <rect class="group" x="50" y="405" width="330" height="150"/>
+  <text class="group-title" x="75" y="438">外部访问</text>
+  <rect class="box blue" x="82" y="464" width="126" height="58"/>
+  <text class="box-title" x="98" y="491">浏览器 / curl</text>
+  <text class="box-text" x="111" y="512">HTTP 请求</text>
+  <rect class="box blue" x="245" y="464" width="92" height="58"/>
+  <text class="box-title" x="260" y="491">TCP 连接</text>
+  <text class="box-text" x="267" y="512">短连接</text>
+  <path class="arrow" d="M208 493 H239"/>
+  <path class="arrow" d="M337 493 C410 493 440 405 520 405"/>
+
+  <rect class="group" x="1190" y="125" width="360" height="430"/>
+  <text class="group-title" x="1215" y="158">请求处理链路</text>
+  <rect class="box gray" x="1220" y="185" width="290" height="54"/>
+  <text class="box-title" x="1248" y="208">buffer 请求/响应缓冲</text>
+  <text class="box-text" x="1258" y="228">read buffer · header buffer</text>
+  <rect class="box blue" x="1220" y="265" width="290" height="58"/>
+  <text class="box-title" x="1250" y="289">http 解析请求 / 构造响应</text>
+  <text class="box-text" x="1262" y="310">GET · HTTP/1.0 · HTTP/1.1</text>
+  <rect class="box green" x="1220" y="350" width="290" height="68"/>
+  <text class="box-title" x="1240" y="375">static_file 静态文件处理</text>
+  <text class="box-text" x="1248" y="396">URI 解码 · 路径规范化 · realpath</text>
+  <rect class="box green" x="1220" y="445" width="136" height="54"/>
+  <text class="box-title" x="1264" y="468">mime</text>
+  <text class="box-text" x="1245" y="488">Content-Type</text>
+  <rect class="box green" x="1374" y="445" width="136" height="54"/>
+  <text class="box-title" x="1400" y="468">public/www</text>
+  <text class="box-text" x="1402" y="488">静态文件根目录</text>
+  <path class="arrow" d="M1365 239 V259"/>
+  <path class="arrow-green" d="M1365 323 V344"/>
+  <path class="arrow-green" d="M1365 418 C1365 432 1326 433 1298 445"/>
+  <path class="arrow-green" d="M1365 418 C1365 432 1404 433 1432 445"/>
+  <path class="arrow" d="M1040 405 C1100 405 1148 222 1220 212"/>
+  <path class="arrow-green" d="M1356 472 C1110 505 1048 474 876 472"/>
+
+  <rect class="group" x="455" y="590" width="510" height="150"/>
+  <text class="group-title" x="480" y="623">响应结果</text>
+  <rect class="pill green" x="490" y="650" width="150" height="38"/>
+  <text class="box-title" x="520" y="675">200 OK 静态文件</text>
+  <rect class="pill red" x="666" y="650" width="138" height="38"/>
+  <text class="box-title" x="688" y="675">400 Bad Request</text>
+  <rect class="pill red" x="830" y="650" width="118" height="38"/>
+  <text class="box-title" x="852" y="675">404 Not Found</text>
+  <rect class="pill red" x="602" y="700" width="178" height="38"/>
+  <text class="box-title" x="626" y="725">501 Not Implemented</text>
+  <text class="small" x="810" y="724">响应头含 Connection: close</text>
+  <path class="arrow-green" d="M1220 382 C1088 560 830 612 615 650"/>
+  <path class="arrow-red" d="M1220 294 C1060 570 895 610 745 650"/>
+  <path class="arrow-red" d="M1220 382 C1120 578 990 620 900 650"/>
+  <path class="arrow" d="M710 650 C650 588 670 530 685 500"/>
+
+  <rect class="group" x="1005" y="590" width="545" height="150"/>
+  <text class="group-title" x="1030" y="623">限制与安全</text>
+  <rect class="pill amber" x="1035" y="650" width="150" height="38"/>
+  <text class="box-title" x="1058" y="675">max_connections</text>
+  <rect class="pill amber" x="1210" y="650" width="150" height="38"/>
+  <text class="box-title" x="1234" y="675">request_timeout</text>
+  <rect class="pill green" x="1385" y="650" width="120" height="38"/>
+  <text class="box-title" x="1410" y="675">防目录遍历</text>
+  <rect class="pill blue" x="1100" y="700" width="190" height="38"/>
+  <text class="box-title" x="1120" y="725">短连接 Connection: close</text>
+  <path class="arrow-amber dash" d="M291 247 C452 570 860 664 1035 669"/>
+  <path class="arrow-green dash" d="M1438 650 C1438 600 1440 546 1442 499"/>
+
+  <rect class="group" x="50" y="590" width="340" height="150"/>
+  <text class="group-title" x="75" y="623">横切模块</text>
+  <rect class="box amber" x="86" y="655" width="260" height="58"/>
+  <text class="box-title" x="184" y="679">log 日志</text>
+  <text class="box-text" x="118" y="700">server / event_loop / connection 输出运行状态</text>
+  <path class="arrow-amber dash" d="M455 218 C350 270 310 500 240 655"/>
+  <path class="arrow-amber dash" d="M520 405 C410 485 350 595 260 655"/>
+  <path class="arrow-amber dash" d="M885 218 C640 260 428 570 310 655"/>
+
+  <rect class="group" x="50" y="785" width="1500" height="72"/>
+  <text class="group-title" x="75" y="817">底层系统调用</text>
+  <text class="code" x="250" y="817">socket / bind / listen / epoll_ctl / epoll_wait / accept4 / read / write / open / close</text>
+  <text class="small" x="75" y="842">当前版本：HTTP GET、静态文件、短连接；暂不包含 HTTPS、keep-alive、动态接口、反向代理、sendfile。</text>
+</svg>
